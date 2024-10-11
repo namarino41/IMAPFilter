@@ -1,0 +1,4 @@
+logs
+config/credentials.yaml
+config/filter.yaml
+*__pycache__

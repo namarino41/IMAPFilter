@@ -1,6 +1,5 @@
 import email
 import re
-import schedule
 import time
 import yaml
 from abc import ABC, abstractmethod
@@ -9,7 +8,6 @@ from enum import Enum
 from filters.filteractions import FilterAction
 from imapclient import IMAPClient, exceptions
 from typing import override
-
 
 from config.logging_config import setup_logging
 import logging
@@ -118,7 +116,7 @@ class GmailIMAPProvider(ImapProvider):
     @override
     def delete_emails(self, emails: list, permanently_delete=False):
         if emails:
-            logger.info("{} email selected for deletion from: {}".format(len(emails), emails))
+            logger.info("{} email selected for deletion from: {}".format(len(emails), self._watching_folder))
             self._server.select_folder(self._watching_folder)   # Open folder for edits
             for email in emails:
                 labels = self._server.get_gmail_labels(email)[email]

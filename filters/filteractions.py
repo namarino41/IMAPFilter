@@ -5,6 +5,7 @@ if TYPE_CHECKING:
 from abc import ABC, abstractmethod
 from filters.filteractions_criteria import FilterActionCriterion
 from typing import override
+import yaml
 
 from config.logging_config import setup_logging
 import logging
@@ -13,10 +14,44 @@ setup_logging()  # Set up the logging system
 
 logger = logging.getLogger(__name__)  # Get the logger for this module
 
+class FilterGroup:
+
+    def __init__(self, watching_folder, filter_actions):
+        self.watching_folder = watching_folder
+        self.filter_actions = FilterAction.create_filter_actions(filter_actions)
+
+    def apply_filters(self, emails, imap_provider: ImapProvider):
+        for filter_action in self.filter_actions:
+            filter_action.apply(emails, imap_provider)
+
+    @staticmethod
+    def create_filter_groups(filters):
+        try:
+            with open(filters, 'r') as file:
+                filters = yaml.safe_load(file)
+                logger.info("FilterActions loaded: {}".format(filters))
+        except Exception as e:
+            logger.error("Failed to load filter: {}".format(e))
+            raise
+        
+        filter_groups = []
+        for filter in filters:
+            watching_folder = filter["folder"]
+            filter_actions = filter["actions"]
+            filter_groups.append(FilterGroup(watching_folder, filter_actions))
+        
+        return filter_groups
+    
+    def __eq__(self, other):
+        if isinstance(other, FilterGroup):
+            return self.watching_folder == other.watching_folder
+        return False
+
+    def __hash__(self):
+        return hash(self.watching_folder)
+
 
 class FilterAction(ABC):
-    FILTER_CRITERION_FROM = "from"
-
     @abstractmethod
     def apply(self, emails, imap_provider: ImapProvider):
         raise NotImplementedError
@@ -24,10 +59,11 @@ class FilterAction(ABC):
     @staticmethod
     def create_filter_actions(filters):
         filter_actions_list = []
-        for filter, values in filters.items():
-            match filter:
-                case DeleteFilterAction.DELETE_FILTER_ACTION_TAG:
-                    filter_actions_list.extend(list(map(lambda value: DeleteFilterAction(value), values)))
+        for filter in filters:
+            for filter_action, values in filter.items():
+                match filter_action:
+                    case DeleteFilterAction.DELETE_FILTER_ACTION_TAG:
+                        filter_actions_list.extend(list(map(lambda value: DeleteFilterAction(value), values)))
 
         return filter_actions_list
             

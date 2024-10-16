@@ -71,23 +71,18 @@ class ImapProvider(ABC):
         self._listen()
     
     @staticmethod
-    def create_imap_providers(accounts):
-        imap_providers = []
-        for account in accounts.iterdir():
-            account_domain = account.name.split('@')[1]
+    def create_imap_providers(account):
+        account_domain = account.name.split('@')[1]
 
-            auth = os.path.join(account, "credentials.yaml")
-            filters = os.path.join(account, "filter.yaml")
+        auth = os.path.join(account, "credentials.yaml")
+        filters = os.path.join(account, "filter.yaml")
 
-            filter_groups = FilterGroup.create_filter_groups(filters)
-
-            for filter_group in filter_groups:
-                match account_domain:
-                    case GmailIMAPProvider.GMAIL_DOMAIN:
-                        imap_providers.append(GmailIMAPProvider(auth, filter_group))
-
-        return imap_providers
-
+        filter_groups = FilterGroup.create_filter_groups(filters)
+        for filter_group in filter_groups:
+            match account_domain:
+                case GmailIMAPProvider.GMAIL_DOMAIN:
+                    return GmailIMAPProvider(auth, filter_group)
+                
 
 class GmailIMAPProvider(ImapProvider):
     GMAIL_DOMAIN = 'gmail.com'

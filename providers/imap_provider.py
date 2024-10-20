@@ -20,17 +20,18 @@ class ImapProvider(ABC):
     EMAIL_EXISTS = "EXISTS"
     MAX_CONNECT_TIME = 1500
 
-    def __init__(self, auth, filter_group, imap_server_url):
+    def __init__(self, imap_server_url, auth, filter_group):
         logger.info(f"Initializing IMAP provider for folder: {filter_group.watching_folder}")
 
         self._server = IMAPClient(imap_server_url, use_uid=True)
+        self._auth = auth
         self._filter_group = filter_group
 
-        self.connect(auth)
+        self.connect()
         self._watch_folder()
 
     @abstractmethod
-    def connect(self, auth):   
+    def connect(self):   
         raise NotImplementedError
         
     def get_email_data(self, emails):
@@ -84,15 +85,15 @@ class GmailIMAPProvider(ImapProvider):
 
     def __init__(self, auth, filter_group):
         logger.info(f"Gmail IMAP Provider initialized for folder: {filter_group.watching_folder}")
-        super().__init__(auth, filter_group, self.GMAIL_IMAP_SERVER_URL)
+        super().__init__(self.GMAIL_IMAP_SERVER_URL, auth, filter_group)
 
         self._connect_time = 0
 
     @override
-    def connect(self, auth):
+    def connect(self):
         logger.info("Connecting to Gmail IMAP server.")
         try:
-            with open(auth, 'r') as file:
+            with open(self._auth, 'r') as file:
                 credentials = yaml.safe_load(file)
                 user = credentials['user']
                 password = credentials['password']
@@ -111,7 +112,8 @@ class GmailIMAPProvider(ImapProvider):
     @override
     def delete_emails(self, emails: list, permanently_delete=False):
         if emails:
-            logger.info("{} email selected for deletion from: {}".format(len(emails), self._filter_group.watching_folder))
+            logger.info("{} email selected for deletion from: {}".format(len(emails), \
+                self._filter_group.watching_folder))
             self._server.select_folder(self._filter_group.watching_folder)   # Open folder for edits
             for email in emails:
                 labels = self._server.get_gmail_labels(email)[email]
@@ -125,17 +127,32 @@ class GmailIMAPProvider(ImapProvider):
     @override
     def listen(self):
         logger.info(f"Started listening for new emails in folder: {self._filter_group.watching_folder}")
-        
         while True:
             try:
                 self._idle_connect()
-                idle_response = self._server.idle_check(timeout=5)
+                idle_response = self._server.idle_check()
 
                 self._handle_response(idle_response)
+            except (ConnectionResetError, BrokenPipeError, ConnectionError) as e:
+                logger.error(f"A connection error has occurred: {e}")
+                logger.info("Attempting to reconnect.")
+                self.connect()
             except Exception as e:
-                logger.error(f"Error during listening: {e}")
-                raise
-            
+                logger.error(f"An unexpected error has occurred: {e}")
+                self._server.logout()
+                break
+
+    def _handle_response(self, idle_response):
+        if idle_response:
+            new_emails = list(map(lambda email: email[0], \
+                list(filter(lambda response: self.EMAIL_EXISTS.encode() in response, idle_response))))
+            if new_emails:
+                logger.info("New emails received: {}".format(new_emails))
+                self._idle_disconnect()
+                for email_filter in self.filters:
+                    logger.info("Applying filters")
+                    email_filter.apply(new_emails, self)
+
     def _idle_connect(self):
         if self._connect_time == 0:
             self._server.idle()
@@ -151,41 +168,8 @@ class GmailIMAPProvider(ImapProvider):
         self._server.idle_done()
         self._connect_time = 0
 
-    def _handle_response(self, idle_response):
-        if idle_response:
-            new_emails = list(map(lambda email: email[0], \
-                list(filter(lambda response: self.EMAIL_EXISTS.encode() in response, idle_response))))
-            if new_emails:
-                logger.info("New emails received: {}".format(new_emails))
-                self._idle_disconnect()
-                for email_filter in self.filters:
-                    logger.info("Applying filters")
-                    email_filter.apply(new_emails, self)
-
- # @override
+    # @override
     # def _idle_check(self):
     #     response = self._server.noop()
     #     if response[1]:
     #         return response[1]
-
-    # @override
-    # def _listen(self):
-    #     try:
-            
-    #         responses = self._idle_check()
-
-    #         if responses:
-    #             new_emails = list(map(lambda email: email[0], \
-    #                 list(filter(lambda response: b'EXISTS' in response, responses))))
-    #             if new_emails:
-    #                 print("NEW MAIL")
-    #                 print(self.get_email_data(new_emails))
-    #                 # emails_to_delete = []
-    #                 # emails = self._server.search(new_emails)
-    #                 # for uid, message_data in self._server.fetch(emails, self.EMAIL_DATA_FORMAT).items():
-    #                 #     email_details = email.message_from_bytes(message_data[self.EMAIL_DATA_FORMAT.encode()])
-    #                 #     if re.findall(self.EMAIL_ADDRESS_SELECTOR, email_details.get("FROM"))[0] == "nick.marino126@gmail.com":
-    #                 #         emails_to_delete.append(uid)
-    #                 # self.delete_emails(emails_to_delete)
-    #     except Exception:
-    #         raise

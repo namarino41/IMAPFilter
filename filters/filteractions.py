@@ -51,8 +51,8 @@ class DeleteFilterAction(FilterAction):
     def apply(self, emails, imap_provider: ImapProvider):  
         logger.info("Applying delete filter action.")      
         emails_to_delete = []
-        logger.info(f"Email data fetched: {email_data.keys()}")
         email_data = imap_provider.get_email_data(emails)
+        logger.info(f"Email data fetched: {email_data.keys()}")
         for uid, email in email_data.items():
             if self._check_criteria(email):
                 logger.info(f"Email {uid} matches criteria for deletion.")

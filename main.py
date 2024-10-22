@@ -11,5 +11,6 @@ accounts = Path(ACCOUNTS_DIR)
 
 for account in accounts.iterdir():
     imap_provider = ImapProvider.create_imap_providers(account)
-    ThreadPoolExecutor(max_workers=1).submit(imap_provider.listen)
+    imap_provider.listen()
+    # ThreadPoolExecutor(max_workers=1).submit(imap_provider.listen)
 

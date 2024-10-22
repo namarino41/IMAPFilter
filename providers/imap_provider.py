@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)  # Get the logger for this module
 class ImapProvider(ABC):
     EMAIL_DATA_FORMAT = "RFC822"
     EMAIL_EXISTS = "EXISTS"
-    MAX_CONNECT_TIME = 1500
+    MAX_CONNECTION_TIME = 1620
 
     def __init__(self, imap_server_url, auth, filter_group):
         logger.info(f"Initializing IMAP provider for folder: {filter_group.watching_folder}")
@@ -35,7 +35,7 @@ class ImapProvider(ABC):
         raise NotImplementedError
         
     def get_email_data(self, emails):
-        logger.info(f"Fetching data for {len(emails)} emails.")
+        logger.info(f"Fetching data for {len(emails)} email(s).")
         email_data = {}
         matching_emails = self._server.search(emails)
         logger.debug(f"Matching emails found: {matching_emails}")
@@ -137,10 +137,11 @@ class GmailIMAPProvider(ImapProvider):
                 logger.error(f"A connection error has occurred: {e}")
                 logger.info("Attempting to reconnect.")
                 self.connect()
-            except Exception as e:
-                logger.error(f"An unexpected error has occurred: {e}")
-                self._server.logout()
-                break
+            # except Exception as e:
+                # logger.error(f"An unexpected error has occurred: {e}")
+                raise
+                # self._server.logout()
+                # break
 
     def _handle_response(self, idle_response):
         if idle_response:
@@ -149,9 +150,8 @@ class GmailIMAPProvider(ImapProvider):
             if new_emails:
                 logger.info("New emails received: {}".format(new_emails))
                 self._idle_disconnect()
-                for email_filter in self.filters:
-                    logger.info("Applying filters")
-                    email_filter.apply(new_emails, self)
+                logger.info("Applying filters")
+                self._filter_group.apply_filters(new_emails, self)
 
     def _idle_connect(self):
         if self._connect_time == 0:
@@ -159,7 +159,7 @@ class GmailIMAPProvider(ImapProvider):
         else:
             time_difference = datetime.now() - self._connect_time
 
-            if time_difference >= self.MAX_CONNECT_TIME:
+            if time_difference >= self.MAX_CONNECTION_TIME:
                 self._server.idle_done()
                 self._server.idle()
                 self._connect_time = datetime.now()
